@@ -6,4 +6,4 @@ WebSocket service for the environment audio system.
 | Name | Default | Description |
 | ---- | ------- | ----------- |
 | `ENVIRONMENT_SERVICE_INTERNAL_PORT` | `35721` | The port the service will listen on. |
-| `ENVIRONMENT_SERVICE_BASE_URL` | `localhost` | The base url used to create the individual consumer urls. |
+| `ENVIRONMENT_SERVICE_BASE_URL` | `http://localhost` | The base url used to create the individual consumer urls. |
