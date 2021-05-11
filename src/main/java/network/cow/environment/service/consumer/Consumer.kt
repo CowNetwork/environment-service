@@ -12,6 +12,7 @@ import java.util.*
  */
 data class Consumer(
     val id: UUID = UUID.randomUUID(),
+    val contextId: UUID,
     val producer: Producer,
     var session: WebSocketSession? = null
 ) {
