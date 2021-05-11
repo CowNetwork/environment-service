@@ -1,12 +1,15 @@
 package network.cow.environment.service.consumer
 
+import com.google.gson.JsonObject
+import com.google.gson.JsonParseException
 import io.ktor.http.*
 import io.ktor.http.cio.websocket.*
 import io.ktor.response.*
 import io.ktor.routing.*
 import io.ktor.websocket.*
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import network.cow.environment.protocol.PayloadRegistry
 import network.cow.environment.protocol.consumer.*
+import network.cow.environment.service.JsonService
 import network.cow.environment.service.close
 import network.cow.environment.service.parseFrame
 import network.cow.environment.service.producer.*
@@ -30,13 +33,13 @@ fun Route.consumerWebSocketRoute() {
         }
 
         val exists = ConsumerRegistry.connectConsumer(uuid, this)
-        if (!exists) return@webSocket this.call.respond(HttpStatusCode.BadRequest, "The consumer does not exist.")
+        if (!exists) return@webSocket this.call.respond(HttpStatusCode.BadRequest, "The consumer does not exist or is already connected.")
 
         try {
             for (frame in incoming) {
                 this.handleFrame(frame)
             }
-        } catch (e: ClosedReceiveChannelException) {
+        } finally {
             ConsumerRegistry.disconnectConsumer(uuid)
         }
     }
@@ -44,6 +47,10 @@ fun Route.consumerWebSocketRoute() {
 
 private suspend fun WebSocketSession.handleProducerBoundPayload(payload: ProducerBoundPayload) {
     val consumer = ConsumerRegistry.getConsumer(this)
+    if (consumer.id != payload.consumerId) {
+        this.close(CloseReason.Codes.PROTOCOL_ERROR, "Invalid consumer id.")
+        return
+    }
     consumer.producer.send(payload)
 }
 

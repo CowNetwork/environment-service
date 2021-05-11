@@ -3,7 +3,6 @@ package network.cow.environment.service.consumer
 import io.ktor.http.cio.websocket.*
 import network.cow.environment.protocol.service.ConsumerConnectedPayload
 import network.cow.environment.protocol.service.ConsumerDisconnectedPayload
-import network.cow.environment.protocol.service.ConsumerRegisteredPayload
 import java.util.*
 
 /**
@@ -16,6 +15,7 @@ object ConsumerRegistry {
 
     fun registerConsumer(consumer: Consumer) {
         this.consumers[consumer.id] = consumer
+        consumer.producer.consumers.add(consumer)
     }
 
     suspend fun unregisterConsumer(consumer: Consumer) {
@@ -30,6 +30,7 @@ object ConsumerRegistry {
 
     suspend fun connectConsumer(id: UUID, session: WebSocketSession) : Boolean {
         val consumer = this.consumers[id] ?: return false
+        if (consumer.session != null) return false
         consumer.session = session
         consumer.producer.send(ConsumerConnectedPayload(consumer.id))
         this.consumerSessions[session] = id

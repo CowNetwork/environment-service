@@ -3,7 +3,6 @@ package network.cow.environment.service.producer
 import io.ktor.http.cio.websocket.*
 import io.ktor.routing.*
 import io.ktor.websocket.*
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import network.cow.environment.protocol.consumer.*
 import network.cow.environment.protocol.service.ConsumerRegisteredPayload
 import network.cow.environment.protocol.service.RegisterConsumerPayload
@@ -24,7 +23,7 @@ fun Route.producerWebSocketRoute() {
             for (frame in incoming) {
                 this.handleFrame(frame)
             }
-        } catch (e: ClosedReceiveChannelException) {
+        } finally {
             ProducerRegistry.removeProducer(this)
         }
     }
