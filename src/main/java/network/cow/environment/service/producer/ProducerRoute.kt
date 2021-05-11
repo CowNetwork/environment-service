@@ -37,12 +37,12 @@ private suspend fun WebSocketSession.handleRegisterConsumer(payload: RegisterCon
 }
 
 private suspend fun handleUnregisterConsumer(payload: UnregisterConsumerPayload) {
-    val consumer = ConsumerRegistry.getConsumer(payload.consumerId)
+    val consumer = ConsumerRegistry.getConsumer(payload.consumerId) ?: return
     ConsumerRegistry.unregisterConsumer(consumer)
 }
 
 private suspend fun handleConsumerBoundPayload(payload: ConsumerBoundPayload) {
-    val consumer = ConsumerRegistry.getConsumer(payload.consumerId)
+    val consumer = ConsumerRegistry.getConsumer(payload.consumerId) ?: return
     consumer.send(payload)
 }
 

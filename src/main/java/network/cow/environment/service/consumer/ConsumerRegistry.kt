@@ -42,8 +42,8 @@ object ConsumerRegistry {
         consumer.session = null
     }
 
-    fun getConsumer(id: UUID) = this.consumers[id]!!
+    fun getConsumer(id: UUID) = this.consumers[id]
 
-    fun getConsumer(session: WebSocketSession) = this.getConsumer(this.consumerSessions[session]!!)
+    fun getConsumer(session: WebSocketSession) = this.consumerSessions[session]?.let { this.getConsumer(it) }
 
 }

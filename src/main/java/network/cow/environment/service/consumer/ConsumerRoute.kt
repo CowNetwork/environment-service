@@ -43,7 +43,7 @@ fun Route.consumerWebSocketRoute() {
 
 private suspend fun WebSocketSession.handleProducerBoundPayload(payload: ProducerBoundPayload) {
     val consumer = ConsumerRegistry.getConsumer(this)
-    if (consumer.id != payload.consumerId) {
+    if (consumer == null || consumer.id != payload.consumerId) {
         this.close(CloseReason.Codes.PROTOCOL_ERROR, "Invalid consumer id.")
         return
     }

@@ -22,7 +22,8 @@ fun main() {
 
     embeddedServer(Netty, port = internalPort) {
         install(WebSockets) {
-            timeout = Duration.ofSeconds(Int.MAX_VALUE.toLong()) // TODO
+            pingPeriod = Duration.ofSeconds(60)
+            timeout = Duration.ofSeconds(300)
         }
         install(Authentication) {
             basic("auth-basic-internal") {
