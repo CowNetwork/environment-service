@@ -20,6 +20,6 @@ object ProducerRegistry {
         producer.consumers.clear()
     }
 
-    suspend fun getProducer(session: WebSocketSession) = this.producers[session]!!
+    fun getProducer(session: WebSocketSession) = this.producers[session]!!
 
 }

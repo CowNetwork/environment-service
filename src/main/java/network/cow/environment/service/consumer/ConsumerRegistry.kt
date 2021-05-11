@@ -3,6 +3,7 @@ package network.cow.environment.service.consumer
 import io.ktor.http.cio.websocket.*
 import network.cow.environment.protocol.service.ConsumerConnectedPayload
 import network.cow.environment.protocol.service.ConsumerDisconnectedPayload
+import network.cow.environment.service.close
 import java.util.*
 
 /**
@@ -20,10 +21,7 @@ object ConsumerRegistry {
 
     suspend fun unregisterConsumer(consumer: Consumer) {
         consumer.producer.consumers.remove(consumer)
-        consumer.session?.close(CloseReason(
-            CloseReason.Codes.NORMAL,
-            "The consumer has been unregistered."
-        ))
+        consumer.session?.close(CloseReason.Codes.NORMAL, "The consumer has been unregistered.")
         this.disconnectConsumer(consumer.id)
         this.consumers.remove(consumer.id)
     }
