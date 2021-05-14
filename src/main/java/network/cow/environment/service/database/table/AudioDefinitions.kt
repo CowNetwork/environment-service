@@ -5,7 +5,7 @@ import org.jetbrains.exposed.dao.id.IntIdTable
 /**
  * @author Benedikt Wüller
  */
-object AudioDefinitions : IntIdTable() {
+object AudioDefinitions : IntIdTable("audio_definitions") {
     val key = varchar("key", 64).uniqueIndex()
     val name = varchar("name", 64)
     val url = text("url")

@@ -1,5 +1,6 @@
 package network.cow.environment.service.database
 
+import network.cow.environment.service.database.table.AudioDefinitions
 import network.cow.environment.service.database.table.Consumers
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
@@ -23,7 +24,7 @@ object DatabaseService {
 
         transaction (this.database) {
             // Make sure the tables exist.
-            SchemaUtils.createMissingTablesAndColumns(Consumers)
+            SchemaUtils.createMissingTablesAndColumns(Consumers, AudioDefinitions)
         }
     }
 

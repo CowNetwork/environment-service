@@ -1,49 +1,37 @@
 package network.cow.environment.service.consumer
 
+import com.google.common.collect.HashBiMap
 import io.ktor.http.cio.websocket.*
-import network.cow.environment.protocol.service.ConsumerConnectedPayload
-import network.cow.environment.protocol.service.ConsumerDisconnectedPayload
-import network.cow.environment.service.close
+import io.ktor.websocket.*
+import network.cow.environment.service.database.ConsumerState
+import network.cow.environment.service.database.DatabaseService
+import network.cow.environment.service.database.dao.Consumer
+import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
-/**
- * @author Benedikt Wüller
- */
 object ConsumerRegistry {
 
-    private val consumers = mutableMapOf<UUID, Consumer>()
-    private val consumerSessions = mutableMapOf<WebSocketSession, UUID>()
+    private val sessions = HashBiMap.create<UUID, WebSocketServerSession>()
 
-    fun registerConsumer(consumer: Consumer) {
-        this.consumers[consumer.id] = consumer
-        consumer.producer.consumers.add(consumer)
+    fun getSession(uuid: UUID) = sessions[uuid]
+
+    fun getSessionId(session: WebSocketServerSession) = sessions.inverse()[session]
+
+    fun connect(id: UUID, session: WebSocketServerSession) {
+        sessions[id] = session
+        transaction(DatabaseService.database) {
+            val consumer = Consumer.findById(id) ?: return@transaction
+            consumer.state = ConsumerState.CONNECTED
+        }
     }
 
-    suspend fun unregisterConsumer(consumer: Consumer) {
-        consumer.producer.consumers.remove(consumer)
-        consumer.session?.close(CloseReason.Codes.NORMAL, "The consumer has been unregistered.")
-        this.disconnectConsumer(consumer.id)
-        this.consumers.remove(consumer.id)
+    suspend fun disconnect(session: WebSocketServerSession) {
+        session.close()
+        val id = this.sessions.inverse().remove(session) ?: return
+        transaction(DatabaseService.database) {
+            val consumer = Consumer.findById(id) ?: return@transaction
+            consumer.state = ConsumerState.REGISTERED
+        }
     }
-
-    suspend fun connectConsumer(id: UUID, session: WebSocketSession) : Boolean {
-        val consumer = this.consumers[id] ?: return false
-        if (consumer.session != null) return false
-        consumer.session = session
-        consumer.producer.send(ConsumerConnectedPayload(consumer.id))
-        this.consumerSessions[session] = id
-        return true
-    }
-
-    suspend fun disconnectConsumer(id: UUID) {
-        val consumer = this.consumers[id] ?: return
-        this.consumerSessions.remove(consumer.session)
-        consumer.producer.send(ConsumerDisconnectedPayload(consumer.id))
-        consumer.session = null
-    }
-
-    fun getConsumer(id: UUID) = this.consumers[id]
-
-    fun getConsumer(session: WebSocketSession) = this.consumerSessions[session]?.let { this.getConsumer(it) }
 
 }

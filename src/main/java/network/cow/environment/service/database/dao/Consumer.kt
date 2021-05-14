@@ -13,7 +13,6 @@ class Consumer(id: EntityID<UUID>) : UUIDEntity(id) {
     companion object : UUIDEntityClass<Consumer>(Consumers)
     var contextId by Consumers.contextId
     var state by Consumers.state
-    var producerLocks by Consumers.producerLocks
     var startedAt by Consumers.startedAt
     var stoppedAt by Consumers.stoppedAt
 }

@@ -1,104 +1,143 @@
 package network.cow.environment.service.producer
 
+import com.google.protobuf.Message
 import io.ktor.http.cio.websocket.*
 import io.ktor.routing.*
 import io.ktor.websocket.*
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import network.cow.environment.protocol.consumer.*
-import network.cow.environment.protocol.service.ConsumerRegisteredPayload
-import network.cow.environment.protocol.service.RegisterConsumerPayload
-import network.cow.environment.protocol.service.UnregisterConsumerPayload
-import network.cow.environment.service.close
-import network.cow.environment.service.consumer.Consumer
+import network.cow.environment.protocol.Messages
+import network.cow.environment.protocol.v1.*
+import network.cow.environment.service.*
 import network.cow.environment.service.consumer.ConsumerRegistry
-import network.cow.environment.service.parseFrame
-import java.util.UUID
+import network.cow.environment.service.database.ConsumerState
+import network.cow.environment.service.database.DatabaseService
+import network.cow.environment.service.database.dao.AudioDefinition
+import network.cow.environment.service.database.dao.Consumer
+import network.cow.environment.service.database.table.AudioDefinitions
+import network.cow.environment.service.database.table.Consumers
+import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.transactions.transaction
+import org.joda.time.DateTime
+import java.util.*
+import network.cow.environment.protocol.v1.AudioDefinition as ProtoAudioDefinition
 
 /**
  * @author Benedikt Wüller
  */
 
-//                      ,     ,
-//                  ___('-&&&-')__
-//                 '.__./     \__.'
-//     _     _     _ .-'  6  6 \
-//   /` `--'( ('--` `\         |
-//  /        ) )      \ \ _   _|
-// |        ( (        | (0_._0)
-// |         ) )       |/ '---'
-// |        ( (        |\_
-// |         ) )       |( \,
-//  \       ((`       / )__/
-//   |     /:))\     |   d
-//   |    /:((::\    |
-//   |   |:::):::|   |
-//   /   \::&&:::/   \
-//   \   /;U&::U;\   /
-//    | | | u:u | | |
-//    | | \     / | |
-//    | | _|   | _| |
-//    / \""`   `""/ \
-//   | __|       | __|
-//   `"""`       `"""`
-
-private val UNREGISTER_DELAY = 60 * 1000L
-
-private val registeredContextIds = mutableMapOf<UUID, Consumer>()
-private val unregisterJobs = mutableMapOf<UUID, Job>()
+private val KAFKA_TOPIC = System.getenv("ENVIRONMENT_SERVICE_KAFKA_PRODUCER_TOPIC") ?: "cow.global.environment"
+private val PUBLIC_HOST = System.getenv("ENVIRONMENT_SERVICE_PUBLIC_HOST") ?: "localhost"
+private val PUBLIC_PORT = System.getenv("ENVIRONMENT_SERVICE_PUBLIC_PORT")?.toInt() ?: 35721
 
 fun Route.producerWebSocketRoute() {
     webSocket("/producers") {
-        ProducerRegistry.addProducer(this)
+        ProducerRegistry.register(this)
         try {
-            for (frame in incoming) {
-                this.handleFrame(frame)
+            for (frame in this.incoming) {
+                val message = parseFrame(frame)
+                if (!Messages.validate(message)) break
+                if (!this.handleProducerMessage(message)) break
             }
         } finally {
-            ProducerRegistry.removeProducer(this)
+            ProducerRegistry.unregister(this)
         }
     }
 }
 
-private suspend fun WebSocketSession.handleRegisterConsumer(payload: RegisterConsumerPayload) {
-    val producer = ProducerRegistry.getProducer(this)
-    val contextId = payload.contextId
-    unregisterJobs[contextId]?.cancelAndJoin()
-    val consumer = if (registeredContextIds.contains(contextId)) {
-        registeredContextIds[contextId]!!
-    } else {
-        val consumer = Consumer(producer = producer, contextId = contextId)
-        ConsumerRegistry.registerConsumer(consumer)
-        consumer
-    }
-    consumer.producer.send(ConsumerRegisteredPayload(payload.contextId, consumer.id, consumer.url))
-}
-
-private suspend fun handleUnregisterConsumer(payload: UnregisterConsumerPayload) {
-    val consumer = ConsumerRegistry.getConsumer(payload.consumerId) ?: return
-    if (unregisterJobs.containsKey(consumer.contextId)) return
-    unregisterJobs[consumer.contextId] = GlobalScope.launch {
-        delay(UNREGISTER_DELAY)
-        if (!this.isActive) return@launch
-        ConsumerRegistry.unregisterConsumer(consumer)
-        unregisterJobs.remove(consumer.contextId)
+private suspend fun WebSocketServerSession.handleProducerMessage(message: Message) : Boolean {
+    return when (message) {
+        is RegisterConsumerRequest -> this.handleRegisterConsumerRequest(message)
+        is UnregisterConsumerRequest -> this.handleUnregisterConsumerRequest(message)
+        is PlayAudioRequest -> handlePlayAudioRequest(message)
+        is UpdateAudioRequest -> handleConsumerBoundRequest(message.consumerId, message)
+        is FadeAudioRequest -> handleConsumerBoundRequest(message.consumerId, message)
+        is StopAudioRequest -> handleConsumerBoundRequest(message.consumerId, message)
+        is SetPositionRequest -> handleConsumerBoundRequest(message.consumerId, message)
+        else -> false
     }
 }
 
-private suspend fun handleConsumerBoundPayload(payload: ConsumerBoundPayload) {
-    val consumer = ConsumerRegistry.getConsumer(payload.consumerId) ?: return
-    consumer.send(payload)
+private suspend fun WebSocketServerSession.handleRegisterConsumerRequest(message: RegisterConsumerRequest) : Boolean {
+    val producer = ProducerRegistry.getProducer(this) ?: return false
+
+    // Find the latest consumer session within bounds.
+    val existingConsumer = transaction(DatabaseService.database) {
+        Consumer.find {
+            (Consumers.contextId eq message.contextId).and {
+                ((Consumers.stoppedAt eq null).or {
+                    (DateAdd(Consumers.stoppedAt as Column<DateTime>, longLiteral(UNREGISTER_DELAY)) greaterEq now())
+                })
+            }
+        }.orderBy(Consumers.stoppedAt to SortOrder.DESC).firstOrNull()
+    }
+
+    val consumer = when (existingConsumer) {
+        null -> {
+            transaction(DatabaseService.database) {
+                Consumer.new {
+                    this.contextId = message.contextId
+                    this.startedAt = now()
+                }
+            }
+        }
+        else -> existingConsumer
+    }
+
+    producer.addConsumer(consumer.id.value)
+
+    handleConsumerBoundRequest(consumer.id.toString(), ConsumerRegisteredEvent.newBuilder()
+        .setContextId(consumer.contextId)
+        .setConsumerId(consumer.id.toString())
+        .setUrl("https://localhost/${consumer.id}") // TODO
+        .build())
+
+    if (existingConsumer != null) {
+        transaction(DatabaseService.database) {
+            existingConsumer.state = ConsumerState.CONNECTED
+            existingConsumer.stoppedAt = null
+        }
+
+        CloudEventProducer.send(
+            KAFKA_TOPIC, ConsumerChangedInstanceEvent.newBuilder()
+            .setConsumerId(existingConsumer.id.value.toString())
+            .setHost(PUBLIC_HOST)
+            .setPort(PUBLIC_PORT)
+            .build())
+    }
+
+    return true
 }
 
-private suspend fun WebSocketSession.handleFrame(frame: Frame) {
-    when (val payload = this.parseFrame(frame) ?: return) {
-        is RegisterConsumerPayload -> this.handleRegisterConsumer(payload)
-        is UnregisterConsumerPayload -> handleUnregisterConsumer(payload)
-        is ConsumerBoundPayload -> handleConsumerBoundPayload(payload)
-        else -> this.close(CloseReason.Codes.PROTOCOL_ERROR, "Invalid message payload.")
+private fun WebSocketServerSession.handleUnregisterConsumerRequest(message: UnregisterConsumerRequest) : Boolean {
+    val producer = ProducerRegistry.getProducer(this) ?: return false
+    producer.scheduleRemove(UUID.fromString(message.consumerId))
+    return true
+}
+
+private suspend fun handleConsumerBoundRequest(consumerId: String, message: Message) : Boolean {
+    val session = ConsumerRegistry.getSession(UUID.fromString(consumerId)) ?: return false
+    session.send(Messages.toJsonWithTypePrefix(message))
+    return true
+}
+
+private suspend fun handlePlayAudioRequest(message: PlayAudioRequest) : Boolean {
+    val builder = PlayAudioRequest.newBuilder(message)
+
+    if (message.hasKey()) {
+        builder.clearIdentifier()
+
+        val definition = transaction(DatabaseService.database) {
+            AudioDefinition.find { AudioDefinitions.key eq message.key }.firstOrNull()
+        } ?: return false
+
+        builder.definition = ProtoAudioDefinition.newBuilder()
+            .setKey(definition.key)
+            .setName(definition.name)
+            .setUrl(definition.url)
+            .setSourceUrl(definition.sourceUrl)
+            .setReportUrl(definition.reportUrl)
+            .setInformation(definition.information)
+            .build()
     }
+
+    return handleConsumerBoundRequest(message.consumerId, builder.build())
 }

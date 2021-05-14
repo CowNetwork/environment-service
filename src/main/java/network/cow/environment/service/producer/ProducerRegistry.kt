@@ -1,25 +1,35 @@
 package network.cow.environment.service.producer
 
-import io.ktor.http.cio.websocket.*
-import network.cow.environment.service.consumer.ConsumerRegistry
+import com.google.common.collect.HashBiMap
+import io.ktor.websocket.*
+import java.util.*
 
-/**
- * @author Benedikt Wüller
- */
 object ProducerRegistry {
 
-    private val producers = mutableMapOf<WebSocketSession, Producer>()
+    private val consumerProducers = mutableMapOf<UUID, Producer>()
+    private val producers = HashBiMap.create<WebSocketServerSession, Producer>()
 
-    fun addProducer(session: WebSocketSession) {
-        this.producers[session] = Producer(session)
+    fun register(session: WebSocketServerSession) {
+        producers[session] = Producer()
     }
 
-    suspend fun removeProducer(session: WebSocketSession) {
-        val producer = this.producers.remove(session) ?: return
-        producer.consumers.forEach { ConsumerRegistry.unregisterConsumer(it) }
-        producer.consumers.clear()
+    fun getProducer(session: WebSocketServerSession) = producers[session]
+
+    fun getSession(producer: Producer) = producers.inverse()[producer]
+
+    fun unregister(session: WebSocketServerSession) {
+        val producer = producers.remove(session) ?: return
+        producer.scheduleRemovals()
     }
 
-    fun getProducer(session: WebSocketSession) = this.producers[session]!!
+    fun addConsumerProducer(uuid: UUID, producer: Producer) {
+        consumerProducers[uuid] = producer
+    }
+
+    fun removeConsumerProducer(uuid: UUID) = consumerProducers.remove(uuid)
+
+    fun getConsumerProducer(uuid: UUID) = consumerProducers[uuid]
+
+    fun exists(uuid: UUID) = consumerProducers.containsKey(uuid)
 
 }
