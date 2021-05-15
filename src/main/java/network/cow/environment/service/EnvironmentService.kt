@@ -23,6 +23,29 @@ import java.util.*
  * @author Benedikt Wüller
  */
 
+//                           ,     ,
+//                       ___('-&&&-')__
+//                      '.__./     \__.'
+//          _     _     _ .-'  6  6 \
+//        /` `--'( ('--` `\         |
+//       /        ) )      \ \ _   _|
+//      |        ( (        | (0_._0)
+//      |         ) )       |/ '---'
+//      |        ( (        |\_
+//      |         ) )       |( \,
+//       \       ((`       / )__/
+//        |     /:))\     |   d
+//        |    /:((::\    |
+//        |   |:::):::|   |
+//        /   \::&&:::/   \
+//        \   /;U&::U;\   /
+//         | | | u:u | | |
+//         | | \     / | |
+//         | | _|   | _| |
+//         / \""`   `""/ \
+//        | __|       | __|
+//        `"""`       `"""`
+
 const val UNREGISTER_DELAY = 30L
 
 val KAFKA_TOPIC = System.getenv("ENVIRONMENT_SERVICE_KAFKA_PRODUCER_TOPIC") ?: "cow.global.environment"

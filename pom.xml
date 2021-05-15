@@ -16,7 +16,7 @@
         <kotlin.code.style>official</kotlin.code.style>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <kotlin.compiler.incremental>true</kotlin.compiler.incremental>
-        <main.class>network.cow.environment.service.EnviroinmentServiceKt</main.class>
+        <main.class>network.cow.environment.service.EnvironmentServiceKt</main.class>
     </properties>
 
     <repositories>
