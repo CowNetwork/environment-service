@@ -24,10 +24,6 @@ import network.cow.environment.protocol.v1.AudioDefinition as ProtoAudioDefiniti
  * @author Benedikt Wüller
  */
 
-private val KAFKA_TOPIC = System.getenv("ENVIRONMENT_SERVICE_KAFKA_PRODUCER_TOPIC") ?: "cow.global.environment"
-private val PUBLIC_HOST = System.getenv("ENVIRONMENT_SERVICE_PUBLIC_HOST") ?: "localhost"
-private val PUBLIC_PORT = System.getenv("ENVIRONMENT_SERVICE_PUBLIC_PORT")?.toInt() ?: 35721
-
 fun Route.producerWebSocketRoute() {
     webSocket("/producers") {
         ProducerRegistry.register(this)

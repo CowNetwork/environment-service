@@ -25,17 +25,25 @@ import java.util.*
 
 const val UNREGISTER_DELAY = 30L
 
+val KAFKA_TOPIC = System.getenv("ENVIRONMENT_SERVICE_KAFKA_PRODUCER_TOPIC") ?: "cow.global.environment"
+val PUBLIC_HOST = System.getenv("ENVIRONMENT_SERVICE_PUBLIC_HOST") ?: "localhost"
+val PUBLIC_PORT = System.getenv("ENVIRONMENT_SERVICE_PUBLIC_PORT")?.toInt() ?: 35721
+
 fun main() {
     val internalPort = System.getenv("ENVIRONMENT_SERVICE_PORT")?.toInt() ?: 35721
     val internalUsername = System.getenv("ENVIRONMENT_SERVICE_USERNAME") ?: "environment"
     val internalPassword = System.getenv("ENVIRONMENT_SERVICE_PASSWORD") ?: "environment"
 
     CloudEventConsumer.listen(ConsumerChangedInstanceEvent.getDescriptor().fullName, ConsumerChangedInstanceEvent::class.java) {
+        // Ignore events sent from this instance.
+        if (it.host == PUBLIC_HOST && it.port == PUBLIC_PORT) return@listen
+
         val consumerId = UUID.fromString(it.consumerId)
         val session = ConsumerRegistry.getSession(consumerId) ?: return@listen
+
         GlobalScope.launch {
-            ProducerRegistry.getConsumerProducer(consumerId)?.removeConsumer(consumerId, false)
             session.send(Messages.toJsonWithTypePrefix(it))
+            ProducerRegistry.getConsumerProducer(consumerId)?.removeConsumer(consumerId, false)
         }
     }
 
