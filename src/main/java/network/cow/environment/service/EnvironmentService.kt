@@ -50,7 +50,7 @@ const val UNREGISTER_DELAY = 30L
 
 val KAFKA_TOPIC = System.getenv("ENVIRONMENT_SERVICE_KAFKA_PRODUCER_TOPIC") ?: "cow.global.environment"
 val PUBLIC_HOST = System.getenv("ENVIRONMENT_SERVICE_PUBLIC_HOST") ?: "localhost"
-val PUBLIC_PORT = System.getenv("ENVIRONMENT_SERVICE_PUBLIC_PORT")?.toInt() ?: 35721
+val PUBLIC_PORT = System.getenv("ENVIRONMENT_SERVICE_PUBLIC_PORT")?.toInt() ?: System.getenv("ENVIRONMENT_SERVICE_PORT")?.toInt() ?: 35721
 
 fun main() {
     val internalPort = System.getenv("ENVIRONMENT_SERVICE_PORT")?.toInt() ?: 35721
